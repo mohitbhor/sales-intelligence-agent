@@ -59,6 +59,7 @@ def ask_agent_streaming(question: str, conversation_history: list = None):
 
         has_data = False
         current_event = ""
+        seen_events = set()
         for line in response.iter_lines():
             if not line:
                 continue
@@ -67,6 +68,7 @@ def ask_agent_streaming(question: str, conversation_history: list = None):
             # Track SSE event type
             if decoded.startswith("event:"):
                 current_event = decoded.split(":", 1)[1].strip()
+                seen_events.add(current_event)
                 continue
 
             if not decoded.startswith("data:"):
@@ -77,25 +79,27 @@ def ask_agent_streaming(question: str, conversation_history: list = None):
             try:
                 event = json.loads(data_str)
 
-                # Only yield text from the final output events
-                # Skip thinking, status, tool calls, and other internal events
-                if current_event == "response.output_text.delta":
-                    text = event.get("text", "")
-                    if text:
-                        has_data = True
-                        yield text
+                # Skip internal thinking and status events
+                if current_event in ("response.thinking.delta", "response.status"):
+                    continue
 
-                # Fallback: delta/content format (other Snowflake API versions)
-                if current_event in ("", "message"):
-                    for block in event.get("delta", {}).get("content", []):
-                        if block.get("type") == "text":
-                            has_data = True
-                            yield block.get("text", "")
+                # Extract text from any content-bearing event
+                text = event.get("text", "")
+                if text:
+                    has_data = True
+                    yield text
+
+                # Fallback: delta/content format
+                for block in event.get("delta", {}).get("content", []):
+                    if block.get("type") == "text":
+                        has_data = True
+                        yield block.get("text", "")
 
             except json.JSONDecodeError:
                 continue
 
         if not has_data:
+            yield f"⚠️ No response received. Event types seen: {list(seen_events)}"
             yield "⚠️ No response received from the agent. Please check your Snowflake agent configuration and PAT token."
 
 
