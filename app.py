@@ -59,12 +59,13 @@ def ask_agent_streaming(question: str, conversation_history: list = None):
 
         has_data = False
         current_event = ""
+        all_events = []  # Debug: capture all event types and data
         for line in response.iter_lines():
             if not line:
                 continue
             decoded = line.decode("utf-8")
 
-            # Track event type (e.g., "event: response.output_text.delta")
+            # Track event type
             if decoded.startswith("event:"):
                 current_event = decoded.split(":", 1)[1].strip()
                 continue
@@ -76,16 +77,15 @@ def ask_agent_streaming(question: str, conversation_history: list = None):
                 break
             try:
                 event = json.loads(data_str)
+                all_events.append({"event_type": current_event, "data_keys": list(event.keys()), "data": str(event)[:200]})
 
-                # Snowflake Cortex Agent format:
-                # event: response.output_text.delta → {"text": "..."}
-                if current_event == "response.output_text.delta":
-                    text = event.get("text", "")
-                    if text:
-                        has_data = True
-                        yield text
+                # Try to extract text from ANY event that has a "text" field
+                text = event.get("text", "")
+                if text and current_event not in ("response.thinking.delta", "response.status"):
+                    has_data = True
+                    yield text
 
-                # Fallback: generic delta/content format
+                # Fallback: delta/content format
                 for block in event.get("delta", {}).get("content", []):
                     if block.get("type") == "text":
                         has_data = True
@@ -93,6 +93,12 @@ def ask_agent_streaming(question: str, conversation_history: list = None):
 
             except json.JSONDecodeError:
                 continue
+
+        if not has_data:
+            # Show all captured event types for debugging
+            unique_events = list({e["event_type"] for e in all_events})
+            sample = json.dumps(all_events[:5], indent=2)
+            yield f"⚠️ No text content found.\n\n**Event types seen:** {unique_events}\n\n**Sample events:**\n```json\n{sample}\n```"
 
         if not has_data:
             yield "⚠️ No response received from the agent. Please check your Snowflake agent configuration and PAT token."
