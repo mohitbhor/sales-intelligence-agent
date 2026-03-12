@@ -130,14 +130,29 @@ st.markdown("""
 # EXAMPLE QUESTIONS
 # ─────────────────────────────────────────────
 with st.expander("💡 Example questions"):
-    examples = [
+    st.caption("📊 **Sales Metrics**")
+    metrics_examples = [
         "How many deals did Sarah Johnson win vs lose?",
-        "What is the total revenue this quarter?",
-        "Which sales rep has the highest win rate?",
-        "Show me deals closed last month",
-        "What is the average deal size by region?",
+        "What is the overall win rate by sales rep?",
+        "What is the total deal value for won deals by product line?",
+        "Show me all deals closed in February 2024",
+        "Which customer has the highest total deal value?",
+        "What is the average deal value by sales stage?",
+        "List all lost deals and their sales reps",
     ]
-    for ex in examples:
+    for ex in metrics_examples:
+        if st.button(ex, key=ex):
+            st.session_state["prefill"] = ex
+
+    st.caption("💬 **Sales Conversations**")
+    convo_examples = [
+        "Summarize the latest conversation with Acme Corp",
+        "What product lines were discussed in recent conversations?",
+        "Which deals are in the negotiation stage?",
+        "Show me all conversations by Sarah Johnson this month",
+        "What are the top deal values from recent conversations?",
+    ]
+    for ex in convo_examples:
         if st.button(ex, key=ex):
             st.session_state["prefill"] = ex
 
