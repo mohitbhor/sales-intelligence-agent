@@ -58,12 +58,17 @@ def ask_agent_streaming(question: str, conversation_history: list = None):
             raise Exception(f"Error {response.status_code}: {response.text}")
 
         has_data = False
-        raw_lines = []  # Debug: collect raw response lines
+        current_event = ""
         for line in response.iter_lines():
             if not line:
                 continue
             decoded = line.decode("utf-8")
-            raw_lines.append(decoded)  # Debug
+
+            # Track event type (e.g., "event: response.output_text.delta")
+            if decoded.startswith("event:"):
+                current_event = decoded.split(":", 1)[1].strip()
+                continue
+
             if not decoded.startswith("data:"):
                 continue
             data_str = decoded[5:].strip()
@@ -71,26 +76,26 @@ def ask_agent_streaming(question: str, conversation_history: list = None):
                 break
             try:
                 event = json.loads(data_str)
-                # Check both "delta" and "choices" response formats
-                # Format 1: {"delta": {"content": [{"type": "text", "text": "..."}]}}
+
+                # Snowflake Cortex Agent format:
+                # event: response.output_text.delta → {"text": "..."}
+                if current_event == "response.output_text.delta":
+                    text = event.get("text", "")
+                    if text:
+                        has_data = True
+                        yield text
+
+                # Fallback: generic delta/content format
                 for block in event.get("delta", {}).get("content", []):
                     if block.get("type") == "text":
                         has_data = True
                         yield block.get("text", "")
-                # Format 2: {"choices": [{"delta": {"content": "..."}}]}
-                for choice in event.get("choices", []):
-                    delta = choice.get("delta", {})
-                    content = delta.get("content", "")
-                    if content:
-                        has_data = True
-                        yield content
+
             except json.JSONDecodeError:
                 continue
 
         if not has_data:
-            # Show raw response for debugging
-            debug_info = "\n".join(raw_lines[:10])  # First 10 lines
-            yield f"⚠️ No text content found in agent response.\n\n**Debug — Raw response (first 10 lines):**\n```\n{debug_info}\n```"
+            yield "⚠️ No response received from the agent. Please check your Snowflake agent configuration and PAT token."
 
 
 # ─────────────────────────────────────────────
